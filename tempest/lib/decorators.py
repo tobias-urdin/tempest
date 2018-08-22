@@ -13,6 +13,7 @@
 # under the License.
 
 import functools
+import time
 import uuid
 
 from oslo_log import log as logging
@@ -146,4 +147,35 @@ def attr(**kwargs):
                 f = testtools.testcase.attr(attr)(f)
         return f
 
+    return decorator
+
+
+def retry(catch, retry, delay):
+    """Decorator for retrying tests on caught exception(s).
+
+    Note that if you apply this retry decorator on a test that
+    spawns resources and does it's cleanup on the class level
+    and not at the test level after a run you might run out of
+    resources.
+
+    :param catch: Exception or tuple of exceptions to catch
+    :param retry: No. of retries
+    :param delay: Delay in seconds between each retry
+    """
+    def decorator(f):
+        @functools.wraps(f)
+        def decorator_retry(*args, **kwargs):
+            for i in range(retry, 0, -1):
+                try:
+                    return f(*args, **kwargs)
+                except catch as e:
+                    # Raise an exception as-is when it is the last try.
+                    if i == 1:
+                        raise
+                    exc_name = e.__class__.__name__
+                    LOG.warning('Caught exception %s, retrying %i more '
+                                'times, next try in %i seconds',
+                                exc_name, i, delay)
+                    time.sleep(delay)
+        return decorator_retry
     return decorator
